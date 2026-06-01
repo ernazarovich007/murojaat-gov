@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- saved from url=(0058)file:///C:/Users/user/Downloads/MurojAAT_GOV_FINAL_29.html -->
+<!-- saved from url=(0058)file:///C:/Users/user/Downloads/MurojAAT_GOV_FINAL_30.html -->
 <html lang="uz"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -1057,7 +1057,7 @@ tbody td{padding:10px 14px;color:var(--text2);vertical-align:middle;white-space:
         <span class="live-dot"></span>
         Jonli rejim
       </div>
-      <div style="font-size:12px;color:var(--text4);padding:0 4px" id="clock">01/06/2026, 16:55</div>
+      <div style="font-size:12px;color:var(--text4);padding:0 4px" id="clock">01/06/2026, 16:59</div>
       <button class="btn" onclick="manualSync()" title="Sheets dan yangilash" id="syncBtn">⟳ Yangilash</button>
       <button class="btn" onclick="exportCSV()">↓ Eksport</button>
       <button class="btn" onclick="openPwdModal()" style="padding:7px 12px" title="Parol o&#39;zgartirish">🔐 Parol</button>
@@ -3864,51 +3864,80 @@ function checkUserPassword(login, pass) {
 // Login funksiyasini override
 function doLogin() {
   var username = document.getElementById("loginUsername").value.trim();
-  var password = document.getElementById("loginPassword").value;
+  var password = document.getElementById("loginPassword").value.trim();
   var errEl    = document.getElementById("loginError");
+  var btn      = document.querySelector(".login-btn");
 
   if (!username || !password) {
     errEl.textContent = "Login va parolni kiriting!";
-    errEl.style.display = "block"; return;
+    errEl.style.display = "block";
+    return;
   }
 
-  var btn = document.querySelector(".login-btn");
   if (btn) { btn.textContent = "Tekshirilmoqda..."; btn.disabled = true; }
+  errEl.style.display = "none";
 
-  // Avval Supabase dan tekshir, keyin local USERS
-  doLoginSupabase(username, password).then(function(sbUser) {
-    var user = null;
-    if (sbUser) {
-      user = { id:sbUser.id, login:sbUser.login, name:sbUser.full_name, role:sbUser.role };
-    } else {
-      // Fallback: local USERS massivi
-      var found = USERS.find(function(u){ return u.login === username; });
-      if (found && checkUserPassword(username, password)) user = found;
-    }
-
+  // Supabase users jadvalidan tekshirish
+  loginWithSupabase(username, password).then(function(user) {
     if (btn) { btn.textContent = "Kirish →"; btn.disabled = false; }
 
     if (!user) {
-      errEl.textContent = "Login yoki parol noto'g'ri!";
+      errEl.textContent = "Login yoki parol notoʼgʼri!";
       errEl.style.display = "block";
       document.getElementById("loginPassword").value = "";
-      var box = document.querySelector(".login-box");
-      if(box){ box.style.animation="none"; setTimeout(function(){ box.style.animation=""; },10); }
       return;
     }
 
     var session = {
-      userId: user.id, login: user.login,
-      name: user.name || user.full_name || user.login,
-      role: user.role, loginTime: Date.now(), expiry: Date.now() + SESSION_TTL
+      userId:    user.id,
+      login:     user.login,
+      name:      user.name,
+      role:      user.role,
+      loginTime: Date.now(),
+      expiry:    Date.now() + SESSION_TTL
     };
-    lsSet(SESSION_KEY, session);
+    sessionSave(session);
     currentUser = session;
-    errEl.style.display = "none";
     document.getElementById("loginOverlay").classList.add("hidden");
     initAfterLogin();
   });
 }
+
+async function loginWithSupabase(login, password) {
+  // 1. Supabase users jadvalidan tekshir
+  if (supabase) {
+    try {
+      var res = await supabase
+        .from("users")
+        .select("id, login, password, full_name, role, is_active")
+        .eq("login", login)
+        .eq("is_active", true)
+        .single();
+
+      if (!res.error && res.data && res.data.password === password) {
+        // last_login yangilash
+        supabase.from("users").update({ last_login: new Date().toISOString() }).eq("id", res.data.id);
+        return {
+          id:   res.data.id,
+          login: res.data.login,
+          name: res.data.full_name || res.data.login,
+          role: res.data.role
+        };
+      }
+    } catch(e) {
+      console.warn("Supabase login xato:", e);
+    }
+  }
+
+  // 2. Fallback: lokal USERS massivi
+  var found = USERS.find(function(u) { return u.login === login; });
+  if (found && checkUserPassword(login, password)) {
+    return { id: found.id, login: found.login, name: found.name, role: found.role };
+  }
+
+  return null;
+}
+
 
 // Parol o'zgartirish modal
 function openPwdModal() {
