@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<!-- saved from url=(0058)file:///C:/Users/user/Downloads/MurojAAT_GOV_FINAL_19.html -->
+<!-- saved from url=(0058)file:///C:/Users/user/Downloads/MurojAAT_GOV_FINAL_21.html -->
 <html lang="uz"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>MurojAAT.GOV — Urganch tumani hokimligi</title>
-<script src="./MurojAAT.GOV — Urganch tumani hokimligi_files/chart.umd.js.загрузка"></script>
-<script src="./MurojAAT.GOV — Urganch tumani hokimligi_files/xlsx.full.min.js.загрузка"></script>
+<script src="./index_files/chart.umd.js.загрузка"></script>
+<script src="./index_files/xlsx.full.min.js.загрузка"></script>
 <style>
 /* ===== CALIBRI + RASMIY OQ TEMA ===== */
 :root {
@@ -1056,7 +1056,7 @@ tbody td{padding:10px 14px;color:var(--text2);vertical-align:middle;white-space:
         <span class="live-dot"></span>
         Jonli rejim
       </div>
-      <div style="font-size:12px;color:var(--text4);padding:0 4px" id="clock">01/06/2026, 09:50</div>
+      <div style="font-size:12px;color:var(--text4);padding:0 4px" id="clock">01/06/2026, 10:22</div>
       <button class="btn" onclick="manualSync()" title="Sheets dan yangilash" id="syncBtn">⟳ Yangilash</button>
       <button class="btn" onclick="exportCSV()">↓ Eksport</button>
       <button class="btn" onclick="openPwdModal()" style="padding:7px 12px" title="Parol o&#39;zgartirish">🔐 Parol</button>
@@ -1845,12 +1845,19 @@ var LS_ARCHIVE = "mrj_archive";
 var LS_LOG     = "mrj_log";
 
 function lsGet(k) {
-  try { return JSON.parse(localStorage.getItem(k) || "null"); }
-  catch(e) { return null; }
+  try {
+    var val = localStorage.getItem(k);
+    return val ? JSON.parse(val) : null;
+  } catch(e) { return null; }
 }
 function lsSet(k, v) {
-  try { localStorage.setItem(k, JSON.stringify(v)); return true; }
-  catch(e) { console.warn("localStorage to'lib qoldi:", e); return false; }
+  try {
+    localStorage.setItem(k, JSON.stringify(v));
+    return true;
+  } catch(e) {
+    console.warn("lsSet xato:", k, e);
+    return false;
+  }
 }
 
 // ── 44 USTUN MAPPING ──
@@ -3622,43 +3629,8 @@ var SESSION_KEY = "mrj_session";
 var SESSION_TTL = 8 * 60 * 60 * 1000; // 8 soat
 
 // Login
-function doLogin() {
-  var username = document.getElementById("loginUsername").value.trim();
-  var password = document.getElementById("loginPassword").value;
-  var errEl    = document.getElementById("loginError");
+// doLogin ikkinchi versiyasi ishlatiladi
 
-  if (!username || !password) {
-    errEl.textContent = "Login va parolni kiriting!";
-    errEl.style.display = "block"; return;
-  }
-
-  var user = USERS.find(function(u) {
-    return u.login === username && u.pass === password;
-  });
-
-  if (!user) {
-    errEl.textContent = "Login yoki parol noto'g'ri!";
-    errEl.style.display = "block";
-    document.getElementById("loginPassword").value = "";
-    return;
-  }
-
-  // Session yaratish
-  var session = {
-    userId:    user.id,
-    login:     user.login,
-    name:      user.name,
-    role:      user.role,
-    loginTime: Date.now(),
-    expiry:    Date.now() + SESSION_TTL
-  };
-  lsSet(SESSION_KEY, session);
-  currentUser = session;
-
-  errEl.style.display = "none";
-  document.getElementById("loginOverlay").classList.add("hidden");
-  initAfterLogin();
-}
 
 // Logout
 function doLogout() {
@@ -3807,9 +3779,12 @@ function saveUserPassword(login, newPass) {
 
 // Parol tekshirish — stored yoki default
 function checkUserPassword(login, pass) {
-  var stored = lsGet(PWD_STORE_KEY) || {};
-  if (stored[login]) return stored[login] === pass;
-  // Default parol
+  // Avval localStorage dan o'zgartirgan parolni tekshir
+  try {
+    var stored = JSON.parse(localStorage.getItem(PWD_STORE_KEY) || '{}');
+    if (stored && stored[login]) return stored[login] === pass;
+  } catch(e) {}
+  // Default: USERS massividan tekshir
   var user = USERS.find(function(u){ return u.login === login; });
   return user && user.pass === pass;
 }
