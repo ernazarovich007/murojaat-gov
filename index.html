@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- saved from url=(0058)file:///C:/Users/user/Downloads/MurojAAT_GOV_FINAL_25.html -->
+<!-- saved from url=(0058)file:///C:/Users/user/Downloads/MurojAAT_GOV_FINAL_27.html -->
 <html lang="uz"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -954,7 +954,7 @@ tbody td{padding:10px 14px;color:var(--text2);vertical-align:middle;white-space:
       <div class="login-error" id="loginError">Login yoki parol noto'g'ri!</div>
       <div class="login-field">
         <label>Foydalanuvchi nomi</label>
-        <input type="text" id="loginUsername" placeholder="login" autocomplete="username" onkeydown="if(event.key===&#39;Enter&#39;)doLogin()">
+        <input type="text" id="loginUsername" placeholder="login yoki email" autocomplete="username" onkeydown="if(event.key===&#39;Enter&#39;)doLogin()">
       </div>
       <div class="login-field">
         <label>Parol</label>
@@ -1057,7 +1057,7 @@ tbody td{padding:10px 14px;color:var(--text2);vertical-align:middle;white-space:
         <span class="live-dot"></span>
         Jonli rejim
       </div>
-      <div style="font-size:12px;color:var(--text4);padding:0 4px" id="clock">01/06/2026, 11:04</div>
+      <div style="font-size:12px;color:var(--text4);padding:0 4px" id="clock">01/06/2026, 16:35</div>
       <button class="btn" onclick="manualSync()" title="Sheets dan yangilash" id="syncBtn">⟳ Yangilash</button>
       <button class="btn" onclick="exportCSV()">↓ Eksport</button>
       <button class="btn" onclick="openPwdModal()" style="padding:7px 12px" title="Parol o&#39;zgartirish">🔐 Parol</button>
@@ -1856,13 +1856,7 @@ function lsGet(k) {
 }
 function lsSet(k, v) {
   try {
-    var str = JSON.stringify(v);
-    localStorage.setItem(k, str);
-    // Cookie ga ham saqlash (session uchun)
-    if (k === 'mrj_session') {
-      var exp = new Date(Date.now() + 30*24*60*60*1000).toUTCString();
-      document.cookie = k + '=' + encodeURIComponent(str) + ';expires=' + exp + ';path=/;SameSite=Lax';
-    }
+    localStorage.setItem(k, JSON.stringify(v));
     return true;
   } catch(e) {
     console.warn("lsSet xato:", k, e);
@@ -3642,8 +3636,8 @@ var ROLE_PERMS = {
 };
 
 var currentUser = null;
-var SESSION_KEY = "mrj_session";
-var SESSION_TTL = 30 * 24 * 60 * 60 * 1000; // 30 kun
+var SESSION_KEY  = "mrj_session";
+var SESSION_TTL  = 30 * 24 * 60 * 60 * 1000; // 30 kun
 
 // Login
 // doLogin ikkinchi versiyasi ishlatiladi
@@ -3652,9 +3646,10 @@ var SESSION_TTL = 30 * 24 * 60 * 60 * 1000; // 30 kun
 // Logout
 function doLogout() {
   if (!confirm("Tizimdan chiqishni tasdiqlaysizmi?")) return;
-  localStorage.removeItem(SESSION_KEY);
-  document.cookie = SESSION_KEY + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/';
+  sessionClear();
   currentUser = null;
+  // Supabase dan ham chiqish
+  doLogoutSupabase();
   document.getElementById("loginOverlay").classList.remove("hidden");
   // Reset fields
   document.getElementById("loginUsername").value = "";
@@ -3662,34 +3657,73 @@ function doLogout() {
 }
 
 // Session tekshirish
-function checkSession() {
-  // localStorage dan tekshir
-  var session = lsGet(SESSION_KEY);
+// ── SESSION BOSHQARUVI ──
 
-  // localStorage bo'sh bo'lsa cookie dan o'qi
+function sessionSave(session) {
+  // 1. localStorage
+  try { localStorage.setItem(SESSION_KEY, JSON.stringify(session)); } catch(e){}
+  // 2. sessionStorage (tab yopilmasa saqlanadi)
+  try { sessionStorage.setItem(SESSION_KEY, JSON.stringify(session)); } catch(e){}
+  // 3. Cookie (30 kun)
+  try {
+    var exp = new Date(Date.now() + SESSION_TTL).toUTCString();
+    document.cookie = SESSION_KEY + '=' + encodeURIComponent(JSON.stringify(session)) +
+      ';expires=' + exp + ';path=/;SameSite=Lax';
+  } catch(e){}
+}
+
+function sessionLoad() {
+  var session = null;
+  // 1. localStorage
+  try {
+    var v = localStorage.getItem(SESSION_KEY);
+    if (v) session = JSON.parse(v);
+  } catch(e){}
+  // 2. sessionStorage
+  if (!session) {
+    try {
+      var v2 = sessionStorage.getItem(SESSION_KEY);
+      if (v2) session = JSON.parse(v2);
+    } catch(e){}
+  }
+  // 3. Cookie
   if (!session) {
     try {
       var cookies = document.cookie.split(';');
       for (var i = 0; i < cookies.length; i++) {
         var c = cookies[i].trim();
-        if (c.startsWith(SESSION_KEY + '=')) {
-          var val = decodeURIComponent(c.substring(SESSION_KEY.length + 1));
-          session = JSON.parse(val);
+        if (c.indexOf(SESSION_KEY + '=') === 0) {
+          var raw = decodeURIComponent(c.substring(SESSION_KEY.length + 1));
+          session = JSON.parse(raw);
           // localStorage ga qayta yoz
-          if (session) localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+          if (session) try { localStorage.setItem(SESSION_KEY, JSON.stringify(session)); } catch(e){}
           break;
         }
       }
-    } catch(e) {}
+    } catch(e){}
   }
+  return session;
+}
 
+function sessionClear() {
+  try { localStorage.removeItem(SESSION_KEY); } catch(e){}
+  try { sessionStorage.removeItem(SESSION_KEY); } catch(e){}
+  try {
+    document.cookie = SESSION_KEY + '=;expires=Thu,01 Jan 1970 00:00:00 GMT;path=/';
+  } catch(e){}
+}
+
+function checkSession() {
+  var session = sessionLoad();
   if (!session) return false;
   if (Date.now() > session.expiry) {
-    localStorage.removeItem(SESSION_KEY);
-    document.cookie = SESSION_KEY + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/';
+    sessionClear();
     return false;
   }
   currentUser = session;
+  // Har safar yangilash — cookie muddatini uzaytirish
+  session.expiry = Date.now() + SESSION_TTL;
+  sessionSave(session);
   return true;
 }
 
@@ -4941,9 +4975,24 @@ var SUPABASE_URL = 'https://bjuujywpbyhrxgfegazw.supabase.co';
 var SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJqdXVqeXdwYnlocnhnZmVnYXp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAyNzIyMzksImV4cCI6MjA5NTg0ODIzOX0.1Yp-NXobrOZH7QkDpXXaYDa7tfuYJ0lrZnUNUjaP5yw';
 var supabase = null;
 
+// Rol mapping: email → rol
+var ROLE_MAP = {
+  'admin@murojaat.uz':  { role:'admin',  name:'A. Bobojonov' },
+  'hokim@murojaat.uz':  { role:'admin',  name:'Hokim kabineti' },
+  'xodim1@murojaat.uz': { role:'xodim',  name:'XQ xodimi 1' },
+  'xodim2@murojaat.uz': { role:'xodim',  name:'XQ xodimi 2' },
+  'viewer1@murojaat.uz':{ role:'viewer', name:'Kuzatuvchi' }
+};
+
 function initSupabase() {
   try {
-    supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+      auth: {
+        autoRefreshToken: true,
+        persistSession: true,
+        detectSessionInUrl: false
+      }
+    });
     console.log('Supabase ulandi');
     return true;
   } catch(e) {
@@ -4952,29 +5001,62 @@ function initSupabase() {
   }
 }
 
-// ── LOGIN — Supabase dan tekshirish ──
-async function doLoginSupabase(username, password) {
+// ── LOGIN — Supabase Auth ──
+async function doLoginSupabase(email, password) {
   if (!supabase) return null;
   try {
-    var res = await supabase
-      .from('users')
-      .select('*')
-      .eq('login', username)
-      .eq('is_active', true)
-      .single();
-    if (res.error || !res.data) return null;
-    var user = res.data;
-    // Parol tekshirish (hozircha oddiy, keyinroq hash)
-    if (user.password !== password) return null;
-    // last_login yangilash
-    await supabase.from('users').update({last_login: new Date().toISOString()}).eq('id', user.id);
-    // Audit log
-    await supabase.from('audit_log').insert({user_login: username, action: 'LOGIN_SUCCESS'});
-    return user;
+    // Email formatini tekshir — agar @ yo'q bo'lsa @murojaat.uz qo'sh
+    var loginEmail = email;
+    if (email.indexOf('@') < 0) {
+      loginEmail = email + '@murojaat.uz';
+    }
+    var res = await supabase.auth.signInWithPassword({
+      email: loginEmail,
+      password: password
+    });
+    if (res.error) {
+      console.warn('Supabase auth xato:', res.error.message);
+      return null;
+    }
+    if (!res.data || !res.data.user) return null;
+    var sbUser = res.data.user;
+    // Rol va ism olish
+    var roleInfo = ROLE_MAP[sbUser.email] || { role:'viewer', name: sbUser.email };
+    return {
+      id:    sbUser.id,
+      login: sbUser.email.split('@')[0],
+      email: sbUser.email,
+      name:  roleInfo.name,
+      role:  roleInfo.role
+    };
   } catch(e) {
     console.warn('Login xato:', e);
     return null;
   }
+}
+
+// ── LOGOUT — Supabase Auth ──
+async function doLogoutSupabase() {
+  if (!supabase) return;
+  try { await supabase.auth.signOut(); } catch(e) {}
+}
+
+// ── SUPABASE SESSION TEKSHIRISH ──
+async function checkSupabaseSession() {
+  if (!supabase) return null;
+  try {
+    var res = await supabase.auth.getSession();
+    if (res.error || !res.data || !res.data.session) return null;
+    var sbUser = res.data.session.user;
+    var roleInfo = ROLE_MAP[sbUser.email] || { role:'viewer', name: sbUser.email };
+    return {
+      id:    sbUser.id,
+      login: sbUser.email.split('@')[0],
+      email: sbUser.email,
+      name:  roleInfo.name,
+      role:  roleInfo.role
+    };
+  } catch(e) { return null; }
 }
 
 // ── MA'LUMOTLARNI SUPABASE GA SAQLASH ──
