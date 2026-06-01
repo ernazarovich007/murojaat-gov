@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- saved from url=(0058)file:///C:/Users/user/Downloads/MurojAAT_GOV_FINAL_21.html -->
+<!-- saved from url=(0058)file:///C:/Users/user/Downloads/MurojAAT_GOV_FINAL_22.html -->
 <html lang="uz"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -856,6 +856,7 @@ tbody td{padding:10px 14px;color:var(--text2);vertical-align:middle;white-space:
 }
 
 </style>
+  <script src="./index_files/supabase-js@2"></script>
 </head>
 
 
@@ -1056,7 +1057,7 @@ tbody td{padding:10px 14px;color:var(--text2);vertical-align:middle;white-space:
         <span class="live-dot"></span>
         Jonli rejim
       </div>
-      <div style="font-size:12px;color:var(--text4);padding:0 4px" id="clock">01/06/2026, 10:22</div>
+      <div style="font-size:12px;color:var(--text4);padding:0 4px" id="clock">01/06/2026, 10:51</div>
       <button class="btn" onclick="manualSync()" title="Sheets dan yangilash" id="syncBtn">⟳ Yangilash</button>
       <button class="btn" onclick="exportCSV()">↓ Eksport</button>
       <button class="btn" onclick="openPwdModal()" style="padding:7px 12px" title="Parol o&#39;zgartirish">🔐 Parol</button>
@@ -3209,6 +3210,13 @@ function processFile(file){
       }
       if(!normalized.length) throw new Error("Murojaat raqami ustuni topilmadi ("+Object.keys(rawRows[0]).slice(0,3).join(", ")+")");
       sp(80,"Saqlanmoqda...");
+      // Supabase ga saqlash (localStorage ga ham parallel)
+      var userLogin = currentUser ? currentUser.login : 'admin';
+      saveToSupabase(normalized, file.name, userLogin).then(function(ok) {
+        if (ok) {
+          showToast(normalized.length+" ta murojaat Supabase ga saqlandi!");
+        }
+      });
       saveCurrentData(normalized,file.name);
       saveImportLog(file.name,normalized.length);
       sp(100,normalized.length+" ta murojaat saqlandi");
@@ -3800,26 +3808,42 @@ function doLogin() {
     errEl.style.display = "block"; return;
   }
 
-  var user = USERS.find(function(u){ return u.login === username; });
-  if (!user || !checkUserPassword(username, password)) {
-    errEl.textContent = "Login yoki parol noto'g'ri!";
-    errEl.style.display = "block";
-    document.getElementById("loginPassword").value = "";
-    // Shake animatsiya
-    var box = document.querySelector(".login-box");
-    if(box){ box.style.animation="none"; setTimeout(function(){ box.style.animation=""; },10); }
-    return;
-  }
+  var btn = document.querySelector(".login-btn");
+  if (btn) { btn.textContent = "Tekshirilmoqda..."; btn.disabled = true; }
 
-  var session = {
-    userId: user.id, login: user.login, name: user.name,
-    role: user.role, loginTime: Date.now(), expiry: Date.now() + SESSION_TTL
-  };
-  lsSet(SESSION_KEY, session);
-  currentUser = session;
-  errEl.style.display = "none";
-  document.getElementById("loginOverlay").classList.add("hidden");
-  initAfterLogin();
+  // Avval Supabase dan tekshir, keyin local USERS
+  doLoginSupabase(username, password).then(function(sbUser) {
+    var user = null;
+    if (sbUser) {
+      user = { id:sbUser.id, login:sbUser.login, name:sbUser.full_name, role:sbUser.role };
+    } else {
+      // Fallback: local USERS massivi
+      var found = USERS.find(function(u){ return u.login === username; });
+      if (found && checkUserPassword(username, password)) user = found;
+    }
+
+    if (btn) { btn.textContent = "Kirish →"; btn.disabled = false; }
+
+    if (!user) {
+      errEl.textContent = "Login yoki parol noto'g'ri!";
+      errEl.style.display = "block";
+      document.getElementById("loginPassword").value = "";
+      var box = document.querySelector(".login-box");
+      if(box){ box.style.animation="none"; setTimeout(function(){ box.style.animation=""; },10); }
+      return;
+    }
+
+    var session = {
+      userId: user.id, login: user.login,
+      name: user.name || user.full_name || user.login,
+      role: user.role, loginTime: Date.now(), expiry: Date.now() + SESSION_TTL
+    };
+    lsSet(SESSION_KEY, session);
+    currentUser = session;
+    errEl.style.display = "none";
+    document.getElementById("loginOverlay").classList.add("hidden");
+    initAfterLogin();
+  });
 }
 
 // Parol o'zgartirish modal
@@ -4874,6 +4898,189 @@ function openYonalishFullModal() {
     "</table>";
 
   document.getElementById("yonalishFullOverlay").classList.add("open");
+}
+
+
+
+// ════════════════════════════════════════════
+// SUPABASE INTEGRATION
+// Ma'lumotlar bazasida saqlanadi — o'chmaydi
+// ════════════════════════════════════════════
+
+var SUPABASE_URL = 'https://bjuujywpbyhrxgfegazw.supabase.co';
+var SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJqdXVqeXdwYnlocnhnZmVnYXp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAyNzIyMzksImV4cCI6MjA5NTg0ODIzOX0.1Yp-NXobrOZH7QkDpXXaYDa7tfuYJ0lrZnUNUjaP5yw';
+var supabase = null;
+
+function initSupabase() {
+  try {
+    supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    console.log('Supabase ulandi');
+    return true;
+  } catch(e) {
+    console.warn('Supabase ulanmadi:', e);
+    return false;
+  }
+}
+
+// ── LOGIN — Supabase dan tekshirish ──
+async function doLoginSupabase(username, password) {
+  if (!supabase) return null;
+  try {
+    var res = await supabase
+      .from('users')
+      .select('*')
+      .eq('login', username)
+      .eq('is_active', true)
+      .single();
+    if (res.error || !res.data) return null;
+    var user = res.data;
+    // Parol tekshirish (hozircha oddiy, keyinroq hash)
+    if (user.password !== password) return null;
+    // last_login yangilash
+    await supabase.from('users').update({last_login: new Date().toISOString()}).eq('id', user.id);
+    // Audit log
+    await supabase.from('audit_log').insert({user_login: username, action: 'LOGIN_SUCCESS'});
+    return user;
+  } catch(e) {
+    console.warn('Login xato:', e);
+    return null;
+  }
+}
+
+// ── MA'LUMOTLARNI SUPABASE GA SAQLASH ──
+async function saveToSupabase(rows, fileName, userLogin) {
+  if (!supabase) {
+    // Fallback: localStorage
+    saveCurrentData(rows, fileName);
+    saveImportLog(fileName, rows.length);
+    return true;
+  }
+  try {
+    // 1. Session yaratish
+    var sessionRes = await supabase.from('import_sessions').insert({
+      user_login: userLogin || 'admin',
+      file_name: fileName,
+      records_count: rows.length
+    }).select().single();
+
+    if (sessionRes.error) throw sessionRes.error;
+    var sessionId = sessionRes.data.id;
+
+    // 2. Eski ma'lumotlarni arxivga o'tkazish (session_id null bo'lganlarni)
+    // Yangi session bilan belgilash kifoya
+
+    // 3. Murojaatlarni batch yuklash (1000 ta dan)
+    var batchSize = 500;
+    for (var i = 0; i < rows.length; i += batchSize) {
+      var batch = rows.slice(i, i + batchSize).map(function(r) {
+        return {
+          session_id:        sessionId,
+          murojaat_raqami:   r.murojaat_raqami   || '',
+          masala_raqami:     r.masala_raqami      || '',
+          familiya:          r.familiya           || '',
+          ism:               r.ism                || '',
+          mahalla:           r.mahalla            || '',
+          sektor:            r.sektor             || '',
+          yonalish:          r.yonalish           || '',
+          masala:            r.masala             || '',
+          qaerdan:           r.qaerdan            || '',
+          natija_holat:      r.natija_holat       || '',
+          natija_toifa:      r.natija_toifa       || '',
+          ijrochi:           r.ijrochi            || '',
+          kelgan_sana:       r.kelgan_sana        || '',
+          muddat_kun:        parseInt(r.muddat_kun)        || 0,
+          korib_chiqish_kun: parseInt(r.korib_chiqish_kun) || 0,
+          kechikish_30dan:   parseInt(r.kechikish_30dan)   || 0,
+          kechikib_yopilgan: parseInt(r.kechikib_yopilgan) || 0,
+          takroriylik:       r.takroriylik        || '',
+          jamoaviy:          r.jamoaviy           || '',
+          sayyor_tashkilot:  r.sayyor_tashkilot   || '',
+          sayyor_rahbar:     r.sayyor_rahbar      || '',
+          rahbar_lavozim:    r.rahbar_lavozim     || '',
+          javob_kiritilgan:  r.javob_kiritilgan   || '',
+          javob_yuborilgan:  r.javob_yuborilgan   || '',
+          javob_tasdiqlangan:r.javob_tasdiqlangan || ''
+        };
+      });
+      var ins = await supabase.from('murojaatlar').insert(batch);
+      if (ins.error) throw ins.error;
+    }
+
+    // 4. localStorage ga ham saqla (tezlik uchun)
+    saveCurrentData(rows, fileName);
+    saveImportLog(fileName, rows.length);
+
+    // Audit
+    await supabase.from('audit_log').insert({
+      user_login: userLogin || 'admin',
+      action: 'IMPORT',
+      details: fileName + ' — ' + rows.length + ' ta murojaat'
+    });
+
+    console.log('Supabase ga saqlandi:', rows.length, 'ta');
+    return true;
+  } catch(e) {
+    console.warn('Supabase saqlash xato:', e);
+    // Fallback localStorage
+    saveCurrentData(rows, fileName);
+    saveImportLog(fileName, rows.length);
+    return false;
+  }
+}
+
+// ── SUPABASE DAN YUKLASH ──
+async function loadFromSupabase() {
+  if (!supabase) return false;
+  try {
+    // Eng oxirgi session
+    var sessRes = await supabase
+      .from('import_sessions')
+      .select('*')
+      .order('imported_at', {ascending: false})
+      .limit(1)
+      .single();
+
+    if (sessRes.error || !sessRes.data) return false;
+    var sessionId = sessRes.data.id;
+
+    // O'sha session ning murojaatlari
+    var dataRes = await supabase
+      .from('murojaatlar')
+      .select('*')
+      .eq('session_id', sessionId)
+      .limit(5000);
+
+    if (dataRes.error || !dataRes.data || !dataRes.data.length) return false;
+
+    // localStorage ga saqla
+    lsSet(LS_CURRENT, dataRes.data);
+    applyNewData(dataRes.data);
+
+    var d = new Date(sessRes.data.imported_at);
+    var syncEl = document.getElementById('syncStatus');
+    if (syncEl) syncEl.innerHTML = '<span style="color:var(--green)">&#10003; Supabase: ' +
+      sessRes.data.file_name + ' · ' + d.toLocaleDateString('uz-UZ') + ' ' +
+      d.toLocaleTimeString('uz-UZ',{hour:'2-digit',minute:'2-digit'}) + '</span>';
+
+    console.log('Supabase dan yuklandi:', dataRes.data.length, 'ta');
+    return true;
+  } catch(e) {
+    console.warn('Supabase yuklanmadi:', e);
+    return false;
+  }
+}
+
+// ── IMPORT ARXIVI SUPABASE DAN ──
+async function getSupabaseSessions() {
+  if (!supabase) return [];
+  try {
+    var res = await supabase
+      .from('import_sessions')
+      .select('*')
+      .order('imported_at', {ascending: false})
+      .limit(30);
+    return res.data || [];
+  } catch(e) { return []; }
 }
 
 
