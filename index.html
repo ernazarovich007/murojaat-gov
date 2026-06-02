@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- saved from url=(0058)file:///C:/Users/user/Downloads/MurojAAT_GOV_FINAL_32.html -->
+<!-- saved from url=(0058)file:///C:/Users/user/Downloads/MurojAAT_GOV_FINAL_33.html -->
 <html lang="uz"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -951,7 +951,7 @@ tbody td{padding:10px 14px;color:var(--text2);vertical-align:middle;white-space:
       <div class="login-sub">Urganch tumani hokimligi · Xavfsiz kirish</div>
     </div>
     <div class="login-body">
-      <div class="login-error" id="loginError" style="display: none;">Login yoki parol noto'g'ri!</div>
+      <div class="login-error" id="loginError">Login yoki parol noto'g'ri!</div>
       <div class="login-field">
         <label>Foydalanuvchi nomi</label>
         <input type="text" id="loginUsername" placeholder="login yoki email" autocomplete="username" onkeydown="if(event.key===&#39;Enter&#39;)doLogin()">
@@ -1021,7 +1021,7 @@ tbody td{padding:10px 14px;color:var(--text2);vertical-align:middle;white-space:
       <span class="ico">◧</span> Hisobotlar
     </div>
 
-    <div class="nav-item" onclick="showPage(&#39;sozlamalar&#39;,this)" style="display: none;">
+    <div class="nav-item" onclick="showPage(&#39;sozlamalar&#39;,this)">
       <span class="ico">⚙</span> Sheets sozlamalari
     </div>
   </div>
@@ -1031,7 +1031,7 @@ tbody td{padding:10px 14px;color:var(--text2);vertical-align:middle;white-space:
       <div class="user-ava">AB</div>
       <div>
         <div class="user-name">A. Bobojonov</div>
-        <div class="user-role" id="sidebarUserRole">Administrator</div>
+        <div class="user-role" id="sidebarUserRole">—</div>
       </div>
     </div>
     <div class="user-block-hint">🔐 Parolni o'zgartirish</div>
@@ -1051,13 +1051,13 @@ tbody td{padding:10px 14px;color:var(--text2);vertical-align:middle;white-space:
       </div>
     </div>
     <div class="topbar-right">
-      <div id="topbarRoleBadge"><span class="role-badge role-admin">Administrator: A. Bobojonov</span></div>
+      <div id="topbarRoleBadge"></div>
       <div id="syncStatus" style="font-size:11.5px;color:var(--text3);padding:0 4px;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><span style="color:var(--amber)">⚠ Excel fayl yuklanmagan</span></div>
       <div class="live-indicator">
         <span class="live-dot"></span>
         Jonli rejim
       </div>
-      <div style="font-size:12px;color:var(--text4);padding:0 4px" id="clock">02/06/2026, 09:30</div>
+      <div style="font-size:12px;color:var(--text4);padding:0 4px" id="clock">02/06/2026, 09:32</div>
       <button class="btn" onclick="manualSync()" title="Sheets dan yangilash" id="syncBtn">⟳ Yangilash</button>
       <button class="btn" onclick="exportCSV()">↓ Eksport</button>
       <button class="btn" onclick="openPwdModal()" style="padding:7px 12px" title="Parol o&#39;zgartirish">🔐 Parol</button>
@@ -1813,7 +1813,7 @@ tbody td{padding:10px 14px;color:var(--text2);vertical-align:middle;white-space:
     <div class="modal-grid" id="modalGrid"></div>
   </div>
 </div>
-<div class="toast" id="toast">Sessiya muddati tugadi. Qayta kiring.</div>
+<div class="toast" id="toast"></div>
 
 <script>
 
@@ -3801,14 +3801,7 @@ function initAfterLogin() {
     if (fileInput) fileInput.disabled = true;
   }
 
-  // Session timer — 8 soatdan keyin avtomatik chiqish
-  var remaining = currentUser.expiry - Date.now();
-  if (remaining > 0) {
-    setTimeout(function() {
-      showToast("Sessiya muddati tugadi. Qayta kiring.");
-      setTimeout(doLogout, 2000);
-    }, remaining);
-  }
+  // Session 30 kun davomida saqlanadi
 
   // Tizimni ishga tushirish
   var loaded = loadCurrentFromDB();
