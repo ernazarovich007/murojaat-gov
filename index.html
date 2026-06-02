@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- saved from url=(0058)file:///C:/Users/user/Downloads/MurojAAT_GOV_FINAL_30.html -->
+<!-- saved from url=(0058)file:///C:/Users/user/Downloads/MurojAAT_GOV_FINAL_32.html -->
 <html lang="uz"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -951,7 +951,7 @@ tbody td{padding:10px 14px;color:var(--text2);vertical-align:middle;white-space:
       <div class="login-sub">Urganch tumani hokimligi · Xavfsiz kirish</div>
     </div>
     <div class="login-body">
-      <div class="login-error" id="loginError">Login yoki parol noto'g'ri!</div>
+      <div class="login-error" id="loginError" style="display: none;">Login yoki parol noto'g'ri!</div>
       <div class="login-field">
         <label>Foydalanuvchi nomi</label>
         <input type="text" id="loginUsername" placeholder="login yoki email" autocomplete="username" onkeydown="if(event.key===&#39;Enter&#39;)doLogin()">
@@ -1021,7 +1021,7 @@ tbody td{padding:10px 14px;color:var(--text2);vertical-align:middle;white-space:
       <span class="ico">◧</span> Hisobotlar
     </div>
 
-    <div class="nav-item" onclick="showPage(&#39;sozlamalar&#39;,this)">
+    <div class="nav-item" onclick="showPage(&#39;sozlamalar&#39;,this)" style="display: none;">
       <span class="ico">⚙</span> Sheets sozlamalari
     </div>
   </div>
@@ -1031,7 +1031,7 @@ tbody td{padding:10px 14px;color:var(--text2);vertical-align:middle;white-space:
       <div class="user-ava">AB</div>
       <div>
         <div class="user-name">A. Bobojonov</div>
-        <div class="user-role" id="sidebarUserRole">—</div>
+        <div class="user-role" id="sidebarUserRole">Administrator</div>
       </div>
     </div>
     <div class="user-block-hint">🔐 Parolni o'zgartirish</div>
@@ -1051,13 +1051,13 @@ tbody td{padding:10px 14px;color:var(--text2);vertical-align:middle;white-space:
       </div>
     </div>
     <div class="topbar-right">
-      <div id="topbarRoleBadge"></div>
+      <div id="topbarRoleBadge"><span class="role-badge role-admin">Administrator: A. Bobojonov</span></div>
       <div id="syncStatus" style="font-size:11.5px;color:var(--text3);padding:0 4px;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><span style="color:var(--amber)">⚠ Excel fayl yuklanmagan</span></div>
       <div class="live-indicator">
         <span class="live-dot"></span>
         Jonli rejim
       </div>
-      <div style="font-size:12px;color:var(--text4);padding:0 4px" id="clock">01/06/2026, 16:59</div>
+      <div style="font-size:12px;color:var(--text4);padding:0 4px" id="clock">02/06/2026, 09:30</div>
       <button class="btn" onclick="manualSync()" title="Sheets dan yangilash" id="syncBtn">⟳ Yangilash</button>
       <button class="btn" onclick="exportCSV()">↓ Eksport</button>
       <button class="btn" onclick="openPwdModal()" style="padding:7px 12px" title="Parol o&#39;zgartirish">🔐 Parol</button>
@@ -1813,7 +1813,7 @@ tbody td{padding:10px 14px;color:var(--text2);vertical-align:middle;white-space:
     <div class="modal-grid" id="modalGrid"></div>
   </div>
 </div>
-<div class="toast" id="toast"></div>
+<div class="toast" id="toast">Sessiya muddati tugadi. Qayta kiring.</div>
 
 <script>
 
@@ -3658,59 +3658,71 @@ function doLogout() {
 
 // Session tekshirish
 // ── SESSION BOSHQARUVI ──
+// localStorage + indexedDB double backup
+
+var _memSession = null; // Xotira zaxirasi
 
 function sessionSave(session) {
-  // 1. localStorage
-  try { localStorage.setItem(SESSION_KEY, JSON.stringify(session)); } catch(e){}
-  // 2. sessionStorage (tab yopilmasa saqlanadi)
-  try { sessionStorage.setItem(SESSION_KEY, JSON.stringify(session)); } catch(e){}
-  // 3. Cookie (30 kun)
+  _memSession = session;
+  // localStorage (asosiy)
   try {
-    var exp = new Date(Date.now() + SESSION_TTL).toUTCString();
-    document.cookie = SESSION_KEY + '=' + encodeURIComponent(JSON.stringify(session)) +
-      ';expires=' + exp + ';path=/;SameSite=Lax';
-  } catch(e){}
+    localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+  } catch(e) { console.warn("localStorage xato:", e); }
+  // sessionStorage (zaxira)
+  try {
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
+  } catch(e) {}
+  // Cookie (eng ishonchli zaxira, 30 kun)
+  try {
+    var d = new Date();
+    d.setTime(d.getTime() + SESSION_TTL);
+    var expires = "expires=" + d.toUTCString();
+    document.cookie = SESSION_KEY + "=" + encodeURIComponent(JSON.stringify(session)) +
+      ";" + expires + ";path=/;SameSite=Strict";
+  } catch(e) {}
 }
 
 function sessionLoad() {
-  var session = null;
-  // 1. localStorage
+  // 1. Xotiradan
+  if (_memSession) return _memSession;
+  // 2. localStorage
   try {
-    var v = localStorage.getItem(SESSION_KEY);
-    if (v) session = JSON.parse(v);
-  } catch(e){}
-  // 2. sessionStorage
-  if (!session) {
-    try {
-      var v2 = sessionStorage.getItem(SESSION_KEY);
-      if (v2) session = JSON.parse(v2);
-    } catch(e){}
-  }
-  // 3. Cookie
-  if (!session) {
-    try {
-      var cookies = document.cookie.split(';');
-      for (var i = 0; i < cookies.length; i++) {
-        var c = cookies[i].trim();
-        if (c.indexOf(SESSION_KEY + '=') === 0) {
-          var raw = decodeURIComponent(c.substring(SESSION_KEY.length + 1));
-          session = JSON.parse(raw);
-          // localStorage ga qayta yoz
-          if (session) try { localStorage.setItem(SESSION_KEY, JSON.stringify(session)); } catch(e){}
-          break;
-        }
+    var ls = localStorage.getItem(SESSION_KEY);
+    if (ls) { _memSession = JSON.parse(ls); return _memSession; }
+  } catch(e) {}
+  // 3. sessionStorage
+  try {
+    var ss = sessionStorage.getItem(SESSION_KEY);
+    if (ss) {
+      _memSession = JSON.parse(ss);
+      try { localStorage.setItem(SESSION_KEY, ss); } catch(e) {}
+      return _memSession;
+    }
+  } catch(e) {}
+  // 4. Cookie
+  try {
+    var name = SESSION_KEY + "=";
+    var ca = document.cookie.split(';');
+    for (var i = 0; i < ca.length; i++) {
+      var c = ca[i].trim();
+      if (c.indexOf(name) === 0) {
+        var val = decodeURIComponent(c.substring(name.length));
+        _memSession = JSON.parse(val);
+        try { localStorage.setItem(SESSION_KEY, val); } catch(e) {}
+        return _memSession;
       }
-    } catch(e){}
-  }
-  return session;
+    }
+  } catch(e) {}
+  return null;
 }
 
 function sessionClear() {
-  try { localStorage.removeItem(SESSION_KEY); } catch(e){}
-  try { sessionStorage.removeItem(SESSION_KEY); } catch(e){}
+  _memSession = null;
+  try { localStorage.removeItem(SESSION_KEY); } catch(e) {}
+  try { sessionStorage.removeItem(SESSION_KEY); } catch(e) {}
   try {
-    document.cookie = SESSION_KEY + '=;expires=Thu,01 Jan 1970 00:00:00 GMT;path=/';
-  } catch(e){}
+    document.cookie = SESSION_KEY + "=;expires=Thu, 01 Jan 1970 00:00:00 UTC;path=/;SameSite=Strict";
+  } catch(e) {}
 }
 
 function checkSession() {
@@ -3721,7 +3733,7 @@ function checkSession() {
     return false;
   }
   currentUser = session;
-  // Har safar yangilash — cookie muddatini uzaytirish
+  // Muddatni yangilash
   session.expiry = Date.now() + SESSION_TTL;
   sessionSave(session);
   return true;
